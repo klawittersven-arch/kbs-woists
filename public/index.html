@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="author" content="Sven Klawitter">
+<meta name="theme-color" content="#0d1030">
+<meta name="description" content="Anatomie-Tippspiel: Wo ist der Begriff? Tippe auf Skelett, Muskeln oder Organen die richtige Stelle an.">
+<title>KBS Wo ist’s? Anatomie!</title>
+<link rel="icon" href="img/logo.png">
+<link rel="stylesheet" href="css/woists.css">
+</head>
+<body class="handy">
+<main class="app">
+  <header class="top">
+    <h1 class="brand">KBS Wo ist’s? <span>Anatomie!</span></h1>
+  </header>
+
+  <section class="panel" id="panel" aria-live="polite"></section>
+
+  <section class="spielfeld" id="spielfeld" hidden>
+    <div class="sinfo" id="sInfo"></div>
+    <div class="tabs" id="tabs" hidden></div>
+    <div class="frage" id="frage" aria-live="polite"></div>
+    <div class="zeitbalken" id="sBarBox"><i id="sBar"></i></div>
+    <div class="spielbild"><div id="figur"></div><button class="weiter" id="btnWeiter" hidden>Weiter →</button></div>
+  </section>
+
+  <div class="countdown" id="countdown" hidden><div><b id="cdNum">3</b><small id="cdText"></small></div></div>
+</main>
+<script type="module" src="js/ueben.js"></script>
+</body>
+</html>

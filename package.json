@@ -1,0 +1,13 @@
+{
+  "name": "kbs-woists",
+  "version": "1.0.0",
+  "private": true,
+  "description": "KBS Wo ist’s? Anatomie! – Tippspiel zu Skelett, Muskeln und Organen, mit Klassenmodus",
+  "type": "module",
+  "scripts": {
+    "start": "node server/local.mjs",
+    "test": "node --test tests/room.test.mjs",
+    "e2e": "node tests/e2e.mjs",
+    "deploy": "npx wrangler deploy"
+  }
+}
