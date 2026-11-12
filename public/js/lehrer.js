@@ -193,7 +193,6 @@ function quali() {
           <p class="hint">${esc(PUNKTE_TEXT)}</p></div>
         <div class="tcard qside"><div class="qtimer" id="qTimer"></div><canvas id="qrSmall" class="qr small" role="img" aria-label="QR-Code für Nachzügler"></canvas></div>
       </div>
-      <div class="rkhead"><span>gerade</span><span>Treffer</span><span>Bestwert</span></div>
       <div class="ranks" id="ranks"></div>
       <div class="tactions"><p class="hint grow" id="qHint"></p>
         <button class="ghost-btn" id="btnBack">Zurück zur Anmeldung</button>
@@ -235,8 +234,8 @@ function quali() {
   btn.innerHTML = offen ? 'Qualifying beenden <span class="kbd">Enter</span>' : 'Weiter zum Finale <span class="kbd">Enter</span>';
   btn.classList.toggle('pulse', !offen);
   $('#qHint').textContent = offen
-    ? `Es zählt der Bestwert: die meisten Punkte am Stück (Zahl rechts). Die ersten ${N} kommen ins Finale.`
-    : `Zeit um! Das ist der Endstand. Die ersten ${N} kommen ins Finale.`;
+    ? `Große Zahl rechts: Bestwert (die meisten Punkte am Stück, er zählt). Daneben: Treffer und die Punkte gerade. Die ersten ${N} kommen ins Finale.`
+    : `Zeit um! Das ist der Endstand. Große Zahl rechts: Bestwert, daneben die Treffer. Die ersten ${N} kommen ins Finale.`;
 }
 function endQuali() {
   const Q = room.quali;

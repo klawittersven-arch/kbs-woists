@@ -216,7 +216,6 @@ body.beamer .chip{font-size:.72em}
 .rk.fin{border-color:var(--sun);background:#2a2f6e}
 .rk.fin .p{color:var(--sun)}
 .rk.off .nm{opacity:.55}
-.rkhead{display:flex;justify-content:flex-end;gap:1.4em;color:var(--muted);font-size:.8em;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:0 .9em}
 .bigcount{position:fixed;inset:0;display:grid;place-items:center;background:rgba(7,9,32,.6);z-index:30;pointer-events:none}
 .bigcount b{font-family:var(--f-display);font-weight:400;font-size:28vh;color:var(--sun);text-shadow:0 .06em 0 var(--sun-deep);animation:pop .35s ease-out;display:block;text-align:center}
 .bigcount span{display:block;text-align:center;font-size:4vh;font-weight:800}
