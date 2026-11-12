@@ -48,6 +48,7 @@ function onMessage(m) {
   switch (m.t) {
     case 'you': you = m; update(); break;
     case 'q-ok': break;
+    case 'ended': stopQuali(); stopFinal(); wachHalten(false); show('ended', '<div class="card"><h2>Das Spiel ist beendet</h2><p>Die Lehrkraft hat die Sitzung geschlossen. Danke fürs Mitspielen!</p></div>'); break;
     case 'kicked': you = null; stopQuali(); stopFinal(); store('woists.name', null); show('kicked', '<div class="card"><h2>Abgemeldet</h2><p>Die Lehrkraft hat deinen Namen entfernt. Du kannst dich mit einem anderen Namen neu anmelden.</p><button class="big-btn" id="btnAgain">Neu anmelden</button></div>', () => { $('#btnAgain').onclick = () => location.reload(); }); break;
     case 'error':
       if (m.why === 'bad-name') { const e = $('#joinErr'); if (e) { e.textContent = 'Bitte einen Vornamen (nur Buchstaben) und den ersten Buchstaben des Nachnamens eingeben.'; e.hidden = false; } }

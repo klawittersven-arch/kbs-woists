@@ -62,7 +62,9 @@ async function tippe(p, art) {
 }
 const text = async (p, sel) => (await p.textContent(sel)).replace(/\s+/g, ' ').trim();
 
-const browser = await chromium.launch();
+// Live-Adresse aus einer Umgebung mit Proxy (z. B. Cloud-Sitzung): Browser über den Proxy schicken
+const proxy = process.argv[2] && (process.env.HTTPS_PROXY || process.env.https_proxy);
+const browser = await chromium.launch(proxy ? { proxy: { server: proxy } } : {});
 let ok = false;
 try {
   // ================================================================ Anmeldung
@@ -321,6 +323,14 @@ try {
   for (const { p, name } of phones) if (await p.evaluate(() => window.__audio)) throw new Error(name + ': Handy hat Ton gestartet');
   if (await U.evaluate(() => window.__audio)) throw new Error('Übungsseite hat Ton gestartet');
   log('Handys und Übungsseite stumm ✓');
+
+  // ================================================================ Sitzung beenden: Daten sofort löschen
+  await T.click('#btnSess');
+  await T.click('#btnWipe');
+  await ph('Sara').waitForSelector('.card h2:has-text("Das Spiel ist beendet")', { timeout: 15000 });
+  await T.waitForFunction(old => { const c = document.querySelector('#codeChip'); return c && !c.textContent.includes(old); }, code, { timeout: 15000 });
+  await T.waitForSelector('#qr', { timeout: 15000 });
+  log('Sitzung gelöscht, Handys informiert, neuer Code am Beamer ✓');
   if (errors.length) throw new Error('JavaScript-Fehler:\n' + errors.join('\n'));
   ok = true;
   log('ALLES OK');
