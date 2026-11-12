@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { RoomLogic, cleanName, cleanCfg, finalPlaetze } from '../src/room.js';
-import { auswahl, frage, fragen, punkte, vergleich, THEMEN, THEMA_LISTE, BILD_LISTE, ZEIT_PRO_BEGRIFF, GNADE, PAUSE_FINALE, VORLAUF_START, SCHLUSS_GNADE } from '../public/js/regeln.js';
+import { auswahl, frage, fragen, punkte, vergleich, cpuZug, CPU_STUFEN, THEMEN, THEMA_LISTE, BILD_LISTE, ZEIT_PRO_BEGRIFF, GNADE, PAUSE_FINALE, VORLAUF_START, SCHLUSS_GNADE } from '../public/js/regeln.js';
 import { BEGRIFFE } from '../public/js/inhalte.js';
 import { BILDER } from '../public/js/bilder/index.js';
 
@@ -79,12 +79,13 @@ test('Reihenfolge: für alle gleich, gemischt, nie zweimal derselbe Begriff dire
   assert.equal(frage([], 1, 0), null);
 });
 
-test('Punkte: 50 sicher, bis zu 50 Tempopunkte, großzügig', () => {
+test('Punkte: 50 sicher, volle Tempopunkte in der ersten Sekunde, ab 4 Sekunden keine mehr', () => {
   assert.equal(punkte(0), 100);
-  assert.equal(punkte(2000), 100);
-  assert.equal(punkte(15000), 50);
+  assert.equal(punkte(1000), 100);
+  assert.equal(punkte(2500), 75);
+  assert.equal(punkte(4000), 50);
   assert.equal(punkte(19999), 50);
-  assert.ok(punkte(5000) > punkte(9000) && punkte(9000) > 50);
+  assert.ok(punkte(1200) > punkte(2000) && punkte(2000) > punkte(3000) && punkte(3000) > 50);
   assert.equal(vergleich({ best: 300, r: 4 }, { best: 200, r: 9 }) < 0, true);
   assert.equal(vergleich({ best: 300, r: 4 }, { best: 300, r: 5 }) > 0, true);
 });
@@ -112,10 +113,10 @@ test('Qualifying: Punkte steigen, ein Fehler setzt auf 0, es zählt der Bestwert
   await R.msg(P[0], { t: 'q', nr, i: 1, ok: true, ms: 15000 });
   await R.msg(P[0], { t: 'q', nr, i: 1, ok: true, ms: 1000 }); // doppelt gesendet: zählt nicht
   await R.msg(P[0], { t: 'q', nr, i: 2, ok: true, ms: 2000 });
-  assert.equal(R.last(P[0], 'q-ok').cur, 250);
+  assert.equal(R.last(P[0], 'q-ok').cur, 233); // 100 + 50 + 83
   await R.msg(P[0], { t: 'q', nr, i: 3, ok: false, ms: 4000, hit: 'hepar' });
   assert.equal(R.last(P[0], 'q-ok').cur, 0);
-  assert.equal(R.last(P[0], 'q-ok').best, 250);
+  assert.equal(R.last(P[0], 'q-ok').best, 233);
   await R.msg(P[0], { t: 'q', nr, i: 4, ok: true, ms: 0 });
   // Tom: 2 richtig, langsam
   await R.msg(P[1], { t: 'q', nr, i: 0, ok: true, ms: 20000 });
@@ -126,8 +127,8 @@ test('Qualifying: Punkte steigen, ein Fehler setzt auf 0, es zählt der Bestwert
   await R.msg(P[2], { t: 'q', nr: nr + 5, i: 1, ok: true, ms: 0 });
   const room = R.last(T, 'room');
   const lena = room.players.find(p => p.name === 'Lena K.');
-  assert.deepEqual(lena.q, { cur: 100, best: 250, r: 4, n: 5 });
-  assert.deepEqual(room.players.map(p => [p.name, p.rank, p.q.best]), [['Lena K.', 1, 250], ['Tom K.', 2, 100], ['Aylin K.', 3, 0]]);
+  assert.deepEqual(lena.q, { cur: 100, best: 233, r: 4, n: 5 });
+  assert.deepEqual(room.players.map(p => [p.name, p.rank, p.q.best]), [['Lena K.', 1, 233], ['Tom K.', 2, 100], ['Aylin K.', 3, 0]]);
   // Nach dem Neuladen bekommt das Handy seinen Stand zurück
   await R.logic.open(P[0], { code: 'ABCDE', role: 'player', pid: P[0].pid });
   const me = R.last(P[0], 'you').me;
@@ -174,7 +175,7 @@ test('Finale: Punkte-Duell mit Auflösung, Zeitablauf, Platzierung nach Bestwert
   f = R.last(T, 'room').final;
   assert.equal(f.q, 1);
   assert.equal(f.last.q, 0);
-  assert.deepEqual(f.last.ans.map(a => a.pts), [100, 77, 54]);
+  assert.deepEqual(f.last.ans.map(a => a.pts), [100, 50, 50]);
   assert.equal(f.last.ans[0].hit, 'femur');
   assert.equal(f.startAt, R.now() + PAUSE_FINALE);
   // Begriff 2: Lena falsch (Punkte auf 0), Aylin tippt nicht → Zeit um
@@ -188,8 +189,8 @@ test('Finale: Punkte-Duell mit Auflösung, Zeitablauf, Platzierung nach Bestwert
   f = R.last(T, 'room').final;
   assert.equal(f.q, 2);
   assert.deepEqual(f.last.ans.map(a => a.why), ['falsch', '', 'zeit']);
-  assert.deepEqual(f.last.st.map(x => x.cur), [0, 177, 0]);
-  assert.deepEqual(f.last.st.map(x => x.best), [100, 177, 54]);
+  assert.deepEqual(f.last.st.map(x => x.cur), [0, 133, 0]);
+  assert.deepEqual(f.last.st.map(x => x.best), [100, 133, 50]);
   // Begriffe 3 bis 5: Lehrkraft beendet einen Begriff, Rest richtig
   for (let q = 2; q < 5; q++) {
     R.tick(PAUSE_FINALE + 100);
@@ -202,8 +203,8 @@ test('Finale: Punkte-Duell mit Auflösung, Zeitablauf, Platzierung nach Bestwert
   f = room.final;
   assert.equal(f.state, 'done');
   assert.equal(f.bisher.length, 5);
-  // Lena: 0 → 100, 200, 300 = Bestwert 300. Tom: Bestwert 177. Aylin: 100 (q2), stopp → 0, 100 → Bestwert 100
-  assert.deepEqual(f.st.map(x => x.best), [300, 177, 100]);
+  // Lena: 0 → 92, 184, 276 = Bestwert 276. Tom: Bestwert 133. Aylin: 92 (q2), stopp → 0, 92 → Bestwert 92
+  assert.deepEqual(f.st.map(x => x.best), [276, 133, 92]);
   assert.deepEqual(f.places, [1, 2, 3]);
   const me = R.last(P[2], 'you').final;
   assert.deepEqual(me.places, [1, 2, 3]);
@@ -211,6 +212,69 @@ test('Finale: Punkte-Duell mit Auflösung, Zeitablauf, Platzierung nach Bestwert
   await R.msg(T, { t: 'revanche' });
   const rv = R.last(T, 'room').final;
   assert.equal(rv.revanche, 1); assert.equal(rv.q, 0); assert.equal(rv.state, 'run');
+});
+
+test('Computergegner: Stärken unterscheiden sich, Züge sind für alle gleich', () => {
+  const quote = st => { let ok = 0; for (let q = 0; q < 2000; q++) ok += cpuZug(99, q, st).ok; return ok / 2000; };
+  assert.ok(quote('leicht') < quote('mittel') && quote('mittel') < quote('stark'));
+  assert.deepEqual(cpuZug(5, 3, 'mittel'), cpuZug(5, 3, 'mittel'));
+  for (const [st, c] of Object.entries(CPU_STUFEN)) for (let q = 0; q < 200; q++) { const z = cpuZug(q * 31, q, st); assert.ok(z.ms >= c.ms[0] && z.ms <= c.ms[1]); }
+});
+
+test('Finale gegen den Computer: CPU wird vorgeschlagen und tippt zur geplanten Zeit', async () => {
+  const { R, T, P } = await klasse(1);
+  await R.msg(T, { t: 'quali-start' });
+  await R.msg(T, { t: 'quali-end' });
+  assert.deepEqual(R.last(T, 'room').final.p, [P[0].pid, 'cpu'], 'nur eine Person: CPU als Finalist/in 2');
+  await R.msg(T, { t: 'final-pick', p: ['cpu', 'cpu'] }); // zweimal CPU geht nicht
+  assert.deepEqual(R.last(T, 'room').final.p, [P[0].pid, 'cpu']);
+  await R.msg(T, { t: 'final-start', p: ['cpu'] });
+  assert.equal(R.last(T, 'error').why, 'final-players');
+  await R.msg(T, { t: 'final-start', p: [P[0].pid, 'cpu'], cfg: { cpu: 'stark', fragen: 5 } });
+  let f = R.last(T, 'room').final;
+  const nr = f.nr;
+  assert.equal(f.names[1], 'CPU'); assert.equal(f.cpu, 1); assert.equal(f.cpuStufe, 'stark');
+  assert.ok(f.cpuMs >= 700 && f.cpuMs <= 2500);
+  assert.equal(R.last(P[0], 'you').final.cpuMs, undefined, 'Handys kennen den Zug der CPU nicht');
+  // Begriff 1: Lena tippt sofort, die CPU erst zu ihrer Zeit
+  R.tick(VORLAUF_START + 100);
+  await R.msg(P[0], { t: 'f', nr, q: 0, ok: true, ms: 100 });
+  await R.msg(T, { t: 'cpu', nr, q: 0 }); // zu früh
+  assert.equal(R.last(T, 'room').final.q, 0, 'wartet auf die CPU');
+  const ms0 = f.cpuMs;
+  R.tick(ms0);
+  await R.msg(T, { t: 'cpu', nr, q: 0 });
+  f = R.last(T, 'room').final;
+  assert.equal(f.q, 1);
+  assert.equal(f.last.ans[1].ms, ms0);
+  assert.equal(f.last.ans[1].pts, f.last.ans[1].ok ? punkte(ms0) : 0);
+  // Begriff 2: Lena tippt nicht, nach Ablauf der Zeit hat die CPU trotzdem ihren Zug gemacht
+  R.tick(PAUSE_FINALE + ZEIT_PRO_BEGRIFF + GNADE + 10);
+  await R.msg(T, { t: 'tick', nr, q: 1 });
+  f = R.last(T, 'room').final;
+  assert.equal(f.q, 2);
+  assert.equal(f.last.ans[0].why, 'zeit');
+  assert.notEqual(f.last.ans[1].why, 'zeit');
+  // Begriff 3: Lehrkraft beendet sofort, bevor die CPU dran war
+  R.tick(f.startAt - R.now());
+  await R.msg(T, { t: 'runde-stopp', nr, q: 2 });
+  f = R.last(T, 'room').final;
+  assert.deepEqual(f.last.ans.map(a => a.why), ['stopp', 'stopp']);
+  // Begriffe 4 und 5
+  for (const q of [3, 4]) {
+    R.tick(f.startAt - R.now() + 100);
+    await R.msg(P[0], { t: 'f', nr, q, ok: true, ms: 100 });
+    R.tick(R.last(T, 'room').final.cpuMs);
+    await R.msg(T, { t: 'cpu', nr, q });
+    f = R.last(T, 'room').final;
+  }
+  assert.equal(R.last(T, 'room').phase, 'podium');
+  assert.equal(f.places.length, 2);
+  assert.deepEqual([...f.places].sort(), [1, 2]);
+  // Revanche mit CPU
+  await R.msg(T, { t: 'revanche' });
+  assert.equal(R.last(T, 'room').phase, 'final');
+  assert.equal(R.last(T, 'room').final.cpu, 1);
 });
 
 test('Finale: Platz bei gleichem Bestwert nach Treffern und Zeit', () => {

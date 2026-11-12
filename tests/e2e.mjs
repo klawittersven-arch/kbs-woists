@@ -104,9 +104,10 @@ try {
   const { auswahl } = await import('../public/js/regeln.js');
   const organeEinfach = new Set(auswahl(BEGRIFFE, 'organe', 'einfach').map(e => e.t));
   // Plan je Handy: ok / falsch nacheinander
+  // So gewählt, dass die Reihenfolge unabhängig vom Tipptempo feststeht (richtig = 50 bis 100 Punkte)
   const plan = {
-    Lena: ['ok', 'ok', 'ok', 'ok', 'ok', 'ok'],
-    Tom: ['ok', 'ok', 'ok', 'ok', 'falsch'],
+    Lena: ['ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok'],
+    Tom: ['ok', 'ok', 'ok', 'ok', 'ok', 'falsch'],
     Max: ['ok', 'falsch', 'ok', 'ok'],
     Aylin: ['ok'],
     Sara: ['falsch'],
@@ -137,7 +138,7 @@ try {
   const best = {};
   for (const { p, name } of phones) best[name] = Number((await p.textContent('#sInfo')).match(/Bestwert\s*(\d+)/)[1]);
   log('Bestwerte Handys', JSON.stringify(best));
-  if (!(best.Lena >= 6 * 90 && best.Tom >= 4 * 90 && best.Tom <= 400 && best.Max <= 200 && best.Aylin <= 100 && best.Sara === 0)) throw new Error('Bestwerte unplausibel');
+  if (!(best.Lena >= 550 && best.Tom >= 250 && best.Tom <= 500 && best.Max >= 100 && best.Max <= 200 && best.Aylin >= 50 && best.Aylin <= 100 && best.Sara === 0)) throw new Error('Bestwerte unplausibel');
   const lvBeamer = await T.$$eval('.rk', els => els.map(e => [e.querySelector('.nm').textContent, Number(e.querySelector('.lv').textContent)]));
   log('Beamer live', JSON.stringify(lvBeamer));
   for (const [nm, v] of lvBeamer) if (best[nm.split(' ')[0]] !== v) throw new Error('Beamer zeigt anderen Bestwert für ' + nm);
@@ -220,12 +221,24 @@ try {
   await shot(T, '14-beamer-siegerehrung');
   const places = await T.$$eval('.places li', els => els.map(e => e.textContent.trim()));
   log('Plätze', places.join(' | '));
-  // Bestwerte: Max 4 richtig am Stück, Tom 3, Lena 2+2, Aylin 1+1 → Max, Tom, Lena, Aylin
-  if (!places[0].startsWith('1. Max') || !places[1].startsWith('2. Tom') || !places[2].startsWith('3. Lena') || !places[3].startsWith('4. Aylin')) throw new Error('Plätze falsch');
-  await ph('Max').waitForSelector('.card.good h2:has-text("gewonnen")', { timeout: 10000 });
-  await shot(ph('Max'), '15-handy-sieg', true);
-  await ph('Aylin').waitForSelector('.card h2:has-text("Platz 4")', { timeout: 10000 });
-  await ph('Sara').waitForSelector('.card h2:has-text("Max M. gewinnt")', { timeout: 10000 });
+  // Plätze müssen zu den Regeln passen: sortiert nach Bestwert, dann Treffer.
+  // Bestwerte je nach Tipptempo: Max 4 richtig am Stück (200–400), Tom 3 (150–300), Lena 2 + 2 (100–200), Aylin 1 + 1 (50–100)
+  const zeilen = places.map(t => { const m = t.match(/^(\d)\. (.+?) (\d+) Punkte · (\d+) richtig$/); return { platz: +m[1], name: m[2], best: +m[3], r: +m[4] }; });
+  for (let i = 1; i < zeilen.length; i++) {
+    const a = zeilen[i - 1], b = zeilen[i];
+    if (a.best < b.best || (a.best === b.best && a.r < b.r)) throw new Error('Plätze nicht nach Bestwert sortiert');
+  }
+  const soll = { Max: [4, 200, 400], Tom: [4, 150, 300], Lena: [4, 100, 200], Aylin: [2, 50, 100] };
+  for (const z of zeilen) {
+    const [r, lo, hi] = soll[z.name.split(' ')[0]];
+    if (z.r !== r || z.best < lo || z.best > hi) throw new Error(`Finale: ${z.name} hat ${z.best} Punkte / ${z.r} richtig, erwartet ${lo}–${hi} / ${r}`);
+  }
+  const sieger = zeilen[0].name;
+  await ph(sieger.split(' ')[0]).waitForSelector('.card.good h2:has-text("gewonnen")', { timeout: 10000 });
+  await shot(ph(sieger.split(' ')[0]), '15-handy-sieg', true);
+  const aylin = zeilen.find(z => z.name.startsWith('Aylin'));
+  if (aylin.platz > 1) await ph('Aylin').waitForSelector(`.card h2:has-text("Platz ${aylin.platz}")`, { timeout: 10000 });
+  await ph('Sara').waitForSelector(`.card h2:has-text("${sieger} gewinnt")`, { timeout: 10000 });
 
   // ================================================================ Finale 2: 2 Personen, Muskeln, Einfach, „Begriff beenden“
   await T.click('#btnOther');
@@ -255,6 +268,39 @@ try {
   const places2 = await T.$$eval('.places li', els => els.map(e => e.textContent.trim()));
   log('Plätze', places2.join(' | '));
   if (!places2[0].startsWith('1. Lena')) throw new Error('Plätze (2) falsch');
+
+  // ================================================================ Finale 3: Lena gegen den Computer (CPU, stark)
+  await T.click('#btnOther');
+  await T.waitForSelector('#slots select');
+  const optionen = await T.$$eval('#slots select:nth-of-type(1) option', els => els.map(e => e.textContent));
+  if (!optionen.some(o => o.includes('CPU'))) throw new Error('Auswahl: Option „CPU“ fehlt');
+  await T.selectOption('#slots .slot:nth-child(1) select', await ph('Lena').evaluate(() => localStorage.getItem('woists.pid').replace(/"/g, '')));
+  await sleep(300);
+  await T.selectOption('#slots .slot:nth-child(2) select', 'cpu');
+  await T.click('.seg[aria-label="Stärke der CPU"] button:has-text("Stark")');
+  await sleep(500);
+  if (!(await T.textContent('#slots')).includes('Computer, Stärke: Stark')) throw new Error('Auswahl: CPU nicht übernommen');
+  await shot(T, '17b-beamer-finale-auswahl-cpu');
+  await T.keyboard.press('Enter');
+  let cpuRichtig = 0;
+  for (let q = 0; q < 5; q++) {
+    await T.waitForFunction(q => document.querySelector('.fbegriff .fnr') && document.querySelector('.fbegriff .fnr').textContent.startsWith(`Begriff ${q + 1} von 5`), q, { timeout: 40000 });
+    await tippe(ph('Lena'), 'ok');
+    await T.waitForFunction(q => document.querySelector('.fbegriff.aufl .fnr') && document.querySelector('.fbegriff.aufl .fnr').textContent.includes(`Begriff ${q + 1} von 5`), q, { timeout: 40000 });
+    await sleep(200);
+    const dots = await T.$$eval('#fFigur .punkt', els => els.length);
+    if (dots !== 2) throw new Error(`CPU-Finale: ${dots} Punkte auf der Abbildung statt 2`);
+    const cpu = await T.$eval('.fcard:nth-child(2)', e => ({ cls: e.className, txt: e.textContent }));
+    if (!cpu.txt.includes('CPU')) throw new Error('CPU-Karte fehlt');
+    if (cpu.cls.includes(' ok')) cpuRichtig++;
+    else if (!cpu.cls.includes(' bad') || cpu.txt.includes('daneben')) throw new Error('CPU-Karte: falscher Tipp ohne Stelle: ' + cpu.txt);
+    if (q === 0 || (!cpu.cls.includes(' ok') && !fs.existsSync(path.join(OUT, '17d-beamer-cpu-daneben.png')))) { await sleep(300); await shot(T, q === 0 ? '17c-beamer-cpu-aufloesung' : '17d-beamer-cpu-daneben'); }
+  }
+  await T.waitForSelector('.winner', { timeout: 30000 });
+  const places3 = await T.$$eval('.places li', els => els.map(e => e.textContent.trim()));
+  log('Plätze gegen die CPU', places3.join(' | '), '· CPU richtig:', cpuRichtig, 'von 5');
+  if (!places3.some(p => p.includes('CPU'))) throw new Error('CPU fehlt in der Siegerehrung');
+  await shot(T, '17e-beamer-siegerehrung-cpu');
 
   // ================================================================ Übungsseite und Erkunden
   const uctx = await browser.newContext(HANDY);

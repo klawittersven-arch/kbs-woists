@@ -3,9 +3,9 @@
 // (src/worker.js für Cloudflare, server/local.mjs für den Laptop) reicht Verbindungen und Speicher herein.
 import { BEGRIFFE } from '../public/js/inhalte.js';
 import {
-  THEMA_LISTE, STUFEN, QUALI_SEKUNDEN, FINAL_GROESSEN, FINAL_FRAGEN, BILD_LISTE,
+  THEMA_LISTE, STUFEN, QUALI_SEKUNDEN, FINAL_GROESSEN, FINAL_FRAGEN, BILD_LISTE, CPU, CPU_LISTE,
   ZEIT_PRO_BEGRIFF, VORLAUF_START, PAUSE_FINALE, GNADE, SCHLUSS_GNADE,
-  auswahl, fragen, punkte, vergleich, zufallsSeed,
+  auswahl, fragen, punkte, vergleich, zufallsSeed, cpuZug,
 } from '../public/js/regeln.js';
 
 export const MAX_PLAYERS = 60;
@@ -37,6 +37,7 @@ export function cleanCfg(c, old) {
     qsek: pick(Number(c.qsek), QUALI_SEKUNDEN, pick(Number(old.qsek), QUALI_SEKUNDEN, 120)),
     finalN: pick(Number(c.finalN), FINAL_GROESSEN, pick(Number(old.finalN), FINAL_GROESSEN, 4)),
     fragen: pick(Number(c.fragen), FINAL_FRAGEN, pick(Number(old.fragen), FINAL_FRAGEN, 10)),
+    cpu: pick(c.cpu, CPU_LISTE, pick(old.cpu, CPU_LISTE, 'mittel')),
   };
 }
 
@@ -165,7 +166,8 @@ export class RoomLogic {
         if (s.phase !== 'quali' || !s.quali) return;
         this.qualiSchliessen(s);
         s.phase = 'final-setup';
-        s.final = { p: this.ranking().slice(0, s.cfg.finalN), state: 'setup' };
+        const beste = this.ranking().slice(0, s.cfg.finalN);
+        s.final = { p: beste.length === 1 ? [beste[0], CPU] : beste, state: 'setup' };
         await this.persist(); this.pushAll(); return;
       }
       case 'final-pick': {
@@ -179,9 +181,9 @@ export class RoomLogic {
         if (msg.t === 'final-start' && s.phase !== 'final-setup') return;
         if (msg.t === 'revanche' && s.phase !== 'podium') return;
         const p = msg.t === 'revanche' && s.final ? s.final.p.slice() : this.cleanFinalists(msg.p, s);
-        if (!p || p.length < 2 || !p.every(pid => s.players[pid])) return conn.send({ t: 'error', why: 'final-players' });
+        if (!p || p.length < 2 || !p.every(pid => pid === CPU || s.players[pid]) || !p.some(pid => pid !== CPU)) return conn.send({ t: 'error', why: 'final-players' });
         const on = this.online();
-        if (!p.every(pid => on.has(pid))) return conn.send({ t: 'error', why: 'final-offline' });
+        if (!p.every(pid => pid === CPU || on.has(pid))) return conn.send({ t: 'error', why: 'final-offline' });
         if (msg.cfg) s.cfg = cleanCfg(msg.cfg, s.cfg);
         const liste = auswahl(BEGRIFFE, s.cfg.thema, s.cfg.stufe);
         if (!liste.length) return conn.send({ t: 'error', why: 'no-terms' });
@@ -189,7 +191,8 @@ export class RoomLogic {
         s.nr++;
         const startAt = now + VORLAUF_START;
         s.final = {
-          nr: s.nr, p, names: p.map(pid => s.players[pid].name), seed, thema: s.cfg.thema, stufe: s.cfg.stufe,
+          nr: s.nr, p, names: p.map(pid => pid === CPU ? 'CPU' : s.players[pid].name), seed, thema: s.cfg.thema, stufe: s.cfg.stufe,
+          cpu: p.indexOf(CPU), cpuStufe: s.cfg.cpu,
           fragen: fragen(liste, seed, Math.min(s.cfg.fragen, Math.max(liste.length, 1) * 3)),
           q: 0, startAt, deadline: startAt + ZEIT_PRO_BEGRIFF, first: true, state: 'run', last: null,
           st: p.map(() => ({ cur: 0, best: 0, r: 0, ms: 0, ans: null })),
@@ -207,7 +210,15 @@ export class RoomLogic {
         if (msg.t === 'tick' && now < f.deadline + GNADE) return;
         if (msg.t === 'runde-stopp' && now < f.startAt) return;
         const why = msg.t === 'tick' ? 'zeit' : 'stopp';
+        this.cpuTipp(f, now);
         f.st.forEach(x => { if (!x.ans) this.antwort(x, { ok: false, why, ms: ZEIT_PRO_BEGRIFF }); });
+        return this.maybeResolve(s);
+      }
+      case 'cpu': {
+        // Der Beamer meldet: Jetzt ist der Computergegner mit Tippen dran
+        const f = s.final;
+        if (s.phase !== 'final' || !f || f.state !== 'run' || msg.nr !== f.nr || msg.q !== f.q) return;
+        if (!this.cpuTipp(f, now)) return;
         return this.maybeResolve(s);
       }
       case 'final-abort': {
@@ -244,9 +255,20 @@ export class RoomLogic {
   }
 
   cleanFinalists(list, s) {
-    const p = Array.isArray(list) ? list.map(String).filter(pid => s.players[pid]) : [];
+    const p = Array.isArray(list) ? list.map(String).filter(pid => pid === CPU || s.players[pid]) : [];
     if (new Set(p).size !== p.length || p.length > 4) return null;
     return p;
+  }
+
+  // Zug des Computergegners verbuchen, sobald seine Bedenkzeit um ist. true, wenn er jetzt getippt hat.
+  cpuTipp(f, now) {
+    if (!(f.cpu >= 0)) return false;
+    const x = f.st[f.cpu];
+    if (x.ans) return false;
+    const z = cpuZug(f.seed, f.q, f.cpuStufe);
+    if (now < f.startAt + z.ms - 500) return false;
+    this.antwort(x, { ok: z.ok, ms: z.ms, why: 'falsch' });
+    return true;
   }
 
   // Eine Antwort verbuchen: richtig = Punkte dazu, falsch = Punkte auf 0. Der Bestwert bleibt.
@@ -362,6 +384,8 @@ export class RoomLogic {
       q: f.q, frage: done ? null : f.fragen[f.q], bisher: f.fragen.slice(0, done ? f.fragen.length : f.q),
       startAt: f.startAt, deadline: f.deadline, first: f.first, last: f.last, places: f.places, revanche: f.revanche,
       st: full ? f.st : undefined,
+      cpu: f.cpu >= 0 ? f.cpu : -1, cpuStufe: f.cpuStufe,
+      cpuMs: full && f.cpu >= 0 && !done ? cpuZug(f.seed, f.q, f.cpuStufe).ms : undefined,
     };
   }
   roomMsg() {
@@ -371,7 +395,7 @@ export class RoomLogic {
       return { pid, name: p.name, q: q ? { cur: q.cur, best: q.best, r: q.r, n: q.n } : null, online: on.has(pid), rank: rank.indexOf(pid) + 1 };
     });
     const f = this.finalView(s.final, true);
-    if (f) f.online = f.p.map(pid => on.has(pid));
+    if (f) f.online = f.p.map(pid => pid === CPU || on.has(pid));
     const Q = s.quali;
     const quali = Q ? { nr: Q.nr, thema: Q.thema, stufe: Q.stufe, anzahl: Q.liste.length, startAt: Q.startAt, endAt: Q.endAt, open: Q.open } : null;
     return { t: 'room', code: s.code, phase: s.phase, cfg: s.cfg, quali, players, now: this.io.now(), final: f };

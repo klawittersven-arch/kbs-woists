@@ -18,12 +18,20 @@ export const STUFE_TEXT = {
 export const QUALI_SEKUNDEN = [90, 120, 180];       // Dauer des Qualifyings (voreingestellt: 2 Minuten)
 export const FINAL_GROESSEN = [2, 3, 4];
 export const FINAL_FRAGEN = [5, 10, 15];            // Begriffe im Finale (voreingestellt: 10)
+// Computergegner im Finale: Wie oft tippt er richtig, und wie lange braucht er (ms, von–bis)?
+export const CPU = 'cpu';
+export const CPU_STUFEN = {
+  leicht: { name: 'Leicht', richtig: 0.55, ms: [2500, 7000], kurz: 'Tippt etwa jedes zweite Mal richtig und lässt sich Zeit.' },
+  mittel: { name: 'Mittel', richtig: 0.75, ms: [1200, 4500], kurz: 'Tippt etwa drei von vier Mal richtig.' },
+  stark: { name: 'Stark', richtig: 0.9, ms: [700, 2500], kurz: 'Tippt fast immer richtig und ist schnell.' },
+};
+export const CPU_LISTE = Object.keys(CPU_STUFEN);
 export const dauerText = s => s % 60 ? s + ' Sekunden' : s === 60 ? '1 Minute' : s / 60 + ' Minuten';
 
 // Zeiten (ms). Großzügig: Getestet wird das Wissen, nicht das Tipptempo.
 export const ZEIT_PRO_BEGRIFF = 20000;  // so lange darf man pro Begriff überlegen
-export const TEMPO_VOLL = 2000;         // bis hierhin gibt es alle Tempopunkte (Zeit zum Lesen)
-export const TEMPO_NULL = 15000;        // ab hier gibt es keine Tempopunkte mehr
+export const TEMPO_VOLL = 1000;         // in der ersten Sekunde gibt es alle Tempopunkte
+export const TEMPO_NULL = 4000;         // ab 4 Sekunden gibt es keine Tempopunkte mehr (aber weiterhin 50 Punkte)
 export const VORLAUF_START = 5000;      // Countdown vor dem Qualifying und vor dem ersten Begriff im Finale
 export const PAUSE_FINALE = 6500;       // Finale: so lange steht die Auflösung am Beamer, dann kommt der nächste Begriff
 export const GNADE = 1500;              // so lange nach Ablauf der Zeit zählen Antworten noch (Netz)
@@ -37,7 +45,7 @@ export function punkte(ms) {
   const f = Math.min(1, Math.max(0, (TEMPO_NULL - ms) / (TEMPO_NULL - TEMPO_VOLL)));
   return GRUNDPUNKTE + Math.round(TEMPOPUNKTE * f);
 }
-export const PUNKTE_TEXT = `Richtig: 50 Punkte, dazu bis zu 50 Tempopunkte (je schneller, desto mehr). Falsch: Deine Punkte fallen auf 0. Es zählt dein Bestwert.`;
+export const PUNKTE_TEXT = `Richtig: 50 Punkte, dazu bis zu 50 Tempopunkte (volle Tempopunkte in der ersten Sekunde, ab 4 Sekunden keine mehr). Falsch: Deine Punkte fallen auf 0. Es zählt dein Bestwert.`;
 
 // Rangfolge: höherer Bestwert vorn, bei Gleichstand mehr Treffer
 export function vergleich(a, b) {
@@ -101,4 +109,13 @@ function mischung(n, seed, runde) {
 }
 export function fragen(liste, seed, anzahl) {
   return Array.from({ length: anzahl }, (_, i) => frage(liste, seed, i)).filter(Boolean);
+}
+
+// Was macht der Computergegner bei Begriff q? Für alle gleich (aus dem Startwert des Finales)
+export function cpuZug(seed, q, stufe) {
+  const st = CPU_STUFEN[stufe] || CPU_STUFEN.mittel;
+  const r = rng((seed ^ Math.imul(q + 7, 2246822519)) >>> 0);
+  const ok = r() < st.richtig;
+  const ms = Math.round(st.ms[0] + r() * (st.ms[1] - st.ms[0]));
+  return { ok, ms };
 }

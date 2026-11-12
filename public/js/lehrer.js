@@ -1,9 +1,10 @@
 // Beamer-Seite der Lehrkraft: Lobby mit QR-Code, Live-Rangliste im Qualifying, Finale mit Ton, Siegerehrung
 import { KNet, randomCode, randomId, store } from './net.js';
-import { erstelleFigur } from './figur.js';
+import { erstelleFigur, name } from './figur.js';
+import { BEGRIFFE } from './inhalte.js';
 import {
   THEMEN, THEMA_LISTE, STUFEN, STUFE_TEXT, QUALI_SEKUNDEN, FINAL_GROESSEN, FINAL_FRAGEN, dauerText,
-  ZEIT_PRO_BEGRIFF, GNADE, SCHLUSS_GNADE, PUNKTE_TEXT,
+  ZEIT_PRO_BEGRIFF, GNADE, SCHLUSS_GNADE, PUNKTE_TEXT, CPU, CPU_STUFEN, CPU_LISTE, rng,
 } from './regeln.js';
 import { Ton } from './ton.js';
 import { esc, getipptText, mmss } from './ui.js';
@@ -14,7 +15,8 @@ const FARBEN = ['#ffb238', '#5ec8ff', '#c08bff', '#ff7eb6']; // Finalisten 1 bis
 
 let sess = store('woists.lehrer');
 let net = null, room = null, screen = '';
-let cfg = Object.assign({ thema: 'skelett', stufe: 'einfach', qsek: 120, finalN: 4, fragen: 10 }, store('woists.lehrer.cfg') || {});
+let cfg = Object.assign({ thema: 'skelett', stufe: 'einfach', qsek: 120, finalN: 4, fragen: 10, cpu: 'mittel' }, store('woists.lehrer.cfg') || {});
+if (!CPU_LISTE.includes(cfg.cpu)) cfg.cpu = 'mittel';
 if (!THEMA_LISTE.includes(cfg.thema)) cfg.thema = 'skelett';
 if (!STUFEN.includes(cfg.stufe)) cfg.stufe = 'einfach';
 if (!QUALI_SEKUNDEN.includes(Number(cfg.qsek))) cfg.qsek = 120;
@@ -120,6 +122,7 @@ function optionen(el, wo) {
   if (wo === 'lobby') add('Qualifying', seg('Dauer des Qualifyings', QUALI_SEKUNDEN.map(s => [s, dauerText(s)]), Number(cfg.qsek), qsek => setCfg({ qsek })), 'Alle spielen gleichzeitig auf dem eigenen Handy. ' + PUNKTE_TEXT);
   add('Finale', seg('Größe des Finales', FINAL_GROESSEN.map(n => [n, n + ' Personen']), Number(cfg.finalN), finalN => setCfg({ finalN })));
   if (wo === 'setup') add('Länge', seg('Begriffe im Finale', FINAL_FRAGEN.map(n => [n, n + ' Begriffe']), Number(cfg.fragen), fragen => setCfg({ fragen })), `Pro Begriff ${ZEIT_PRO_BEGRIFF / 1000} Sekunden Zeit. Es zählt der Bestwert, wie im Qualifying.`);
+  if (wo === 'setup') add('CPU', seg('Stärke der CPU', CPU_LISTE.map(k => [k, CPU_STUFEN[k].name]), cfg.cpu, cpu => { setCfg({ cpu }); $('#desc-cpu').textContent = cpuText(cpu); }), cpuText(cfg.cpu), 'desc-cpu');
 }
 function bigCount(num, text) {
   let el = $('#bigcount');
@@ -128,11 +131,14 @@ function bigCount(num, text) {
   el.innerHTML = `<div><b>${num}</b><span>${esc(text || '')}</span></div>`;
 }
 const einstellText = x => `${THEMEN[x.thema].name} · ${STUFE_TEXT[x.stufe].name}`;
+const cpuText = k => `Computergegner, wählbar bei „Finalist/in“: ${CPU_STUFEN[k].kurz}`;
+const zeigeName = (n, pid) => pid === CPU ? '🤖 ' + n : n;
 
 // ---------------------------------------------------------------- Bildschirme
 function render() {
   if (!room) return;
   if (room.phase !== 'final' && room.phase !== 'podium') stopFinal();
+  if (room.phase !== 'podium') document.querySelectorAll('.confetti').forEach(c => c.remove());
   switch (room.phase) {
     case 'lobby': return lobby();
     case 'quali': return quali();
@@ -278,7 +284,7 @@ function setup() {
     $('#btnFinal').onclick = startFinal;
   }
   const slots = $('#slots');
-  const n = Math.min(cfg.finalN, Math.max(2, all.length));
+  const n = Math.min(cfg.finalN, Math.max(2, all.length + 1)); // ein Platz mehr, damit die CPU mitspielen kann
   slots.innerHTML = '';
   for (let i = 0; i < n; i++) {
     const pid = f.p[i] || '';
@@ -286,7 +292,8 @@ function setup() {
     const d = document.createElement('div'); d.className = 'slot';
     d.innerHTML = `<h3>Finalist/in ${i + 1}</h3>`;
     const sel = document.createElement('select');
-    sel.innerHTML = '<option value="">– niemand –</option>' + all.map(p => `<option value="${esc(p.pid)}" ${p.pid === pid ? 'selected' : ''}>${p.rank ? p.rank + '. ' : ''}${esc(p.name)}${p.q ? ' · ' + p.q.best + ' Punkte' : ''}</option>`).join('');
+    sel.innerHTML = '<option value="">– niemand –</option>' + all.map(p => `<option value="${esc(p.pid)}" ${p.pid === pid ? 'selected' : ''}>${p.rank ? p.rank + '. ' : ''}${esc(p.name)}${p.q ? ' · ' + p.q.best + ' Punkte' : ''}</option>`).join('')
+      + `<option value="${CPU}" ${pid === CPU ? 'selected' : ''}>🤖 CPU (Computergegner)</option>`;
     sel.onchange = () => {
       const next = [];
       slots.querySelectorAll('select').forEach(s => { if (s.value && !next.includes(s.value)) next.push(s.value); });
@@ -294,13 +301,13 @@ function setup() {
     };
     d.appendChild(sel);
     const on = document.createElement('div');
-    on.className = 'online ' + (pl ? (pl.online ? 'ja' : 'nein') : '');
-    on.textContent = pl ? (pl.online ? '● Handy verbunden' : '● Handy nicht verbunden: Seite neu öffnen') : '';
+    on.className = 'online ' + (pid === CPU ? 'ja' : pl ? (pl.online ? 'ja' : 'nein') : '');
+    on.textContent = pid === CPU ? `● Computer, Stärke: ${CPU_STUFEN[cfg.cpu].name}` : pl ? (pl.online ? '● Handy verbunden' : '● Handy nicht verbunden: Seite neu öffnen') : '';
     d.appendChild(on);
     slots.appendChild(d);
   }
   $('#ranks').innerHTML = ranked.map(p => `<div class="rk ${f.p.includes(p.pid) ? 'fin' : ''}"><span class="p">${p.rank}.</span><span class="nm">${esc(p.name)}</span><span></span><span class="tm">${treffer(p.q)}</span><span class="lv">${p.q ? p.q.best : 0}</span></div>`).join('');
-  $('#btnFinal').disabled = f.p.length < 2;
+  $('#btnFinal').disabled = f.p.length < 2 || !f.p.some(pid => pid !== CPU);
 }
 function startFinal() {
   Ton.init();
@@ -400,6 +407,11 @@ function planeFrage(f) {
     };
     FB.raf = requestAnimationFrame(tick);
   }, f.startAt);
+  // Computergegner: zu seiner Zeit dem Server Bescheid geben (er verbucht dann den Tipp)
+  if (f.cpu >= 0 && f.cpuMs != null) {
+    at(() => send({ t: 'cpu', nr: f.nr, q: f.q }), f.startAt + f.cpuMs + 150);
+    at(() => { const g = room && room.final; if (g && g.q === f.q && g.st && !g.st[f.cpu].ans) send({ t: 'cpu', nr: f.nr, q: f.q }); }, f.startAt + f.cpuMs + 2000);
+  }
   // die letzten 5 Sekunden leise ticken
   for (let s = 5; s >= 1; s--) at(() => { if (FB && FB.q === f.q && FB.revealed !== f.q) Ton.tick(); }, f.deadline - s * 1000);
   // Zeit abgelaufen: dem Server Bescheid geben (er wertet dann aus)
@@ -416,11 +428,33 @@ function aufloesung(f) {
   const fig = FB.figur;
   fig.zeige(L.frage.b); fig.leeren();
   fig.markiere(L.frage.s, 'ziel');
+  if (f.cpu >= 0) cpuPunkt(f, L, fig);
   L.ans.forEach((a, i) => { if (a && a.x != null) fig.punkt(a.x, a.y, a.ok ? 'ok' : 'bad', String(i + 1), FARBEN[i]); });
   const richtig = L.ans.filter(a => a && a.ok).length;
   begriffBox(`<div class="fnr">Auflösung · Begriff ${L.q + 1} von ${f.n} · ${richtig === L.ans.length ? 'alle richtig!' : richtig ? richtig + ' von ' + L.ans.length + ' richtig' : 'niemand richtig'}</div>
     <div class="fterm ${L.frage.t.length > 20 ? 'lang' : ''}">${esc(L.frage.t)}</div>${L.frage.a ? `<div class="falt">= ${esc(L.frage.a)}</div>` : ''}<div class="fnext" id="fNext"></div>`, 'aufl');
   if (richtig) Ton.richtig(); else Ton.fehler();
+}
+
+// Wo hat die CPU getippt? Richtig: mitten auf die Stelle. Falsch: auf eine andere Stelle derselben Abbildung (ausgelost, für alle gleich)
+function cpuPunkt(f, L, fig) {
+  const a = L.ans[f.cpu];
+  if (!a || a.x != null || (a.why && a.why !== 'falsch')) return;
+  let p = null, hit = '';
+  if (a.ok) p = fig.punktFuer(L.frage.s, 3);
+  else {
+    const andere = [...new Set(BEGRIFFE.filter(e => (Array.isArray(e.bild) ? e.bild : [e.bild]).includes(L.frage.b) && e.stelle !== L.frage.s).map(e => e.stelle))];
+    const r = rng((f.nr * 1000 + L.q) >>> 0);
+    for (let i = andere.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [andere[i], andere[j]] = [andere[j], andere[i]]; }
+    for (const s of andere) {
+      const q = fig.punktFuer(s, 4);
+      if (q && !fig.pruefe(q.x, q.y, L.frage.s).ok) { p = q; hit = s; break; }
+    }
+  }
+  if (!p) return;
+  const sv = fig.zuSvg(p.x, p.y);
+  a.x = sv.x; a.y = sv.y;
+  FB.cpuHit = { q: L.q, hit };
 }
 
 // Karten der Finalisten: Punkte und Bestwert zeigen erst nach der Auflösung den neuen Stand
@@ -434,13 +468,17 @@ function karten(f) {
     if (zeigtAuflösung) {
       const a = f.last.ans[i];
       if (a && a.ok) { cls = 'ok'; txt = `✓ richtig <b>+${a.pts}</b>`; }
-      else if (a) { cls = 'bad'; txt = a.why === 'zeit' ? '✗ Zeit um' : a.why === 'stopp' ? '✗ nicht getippt' : '✗ ' + esc(getipptText(a.hit, f.stufe) || 'daneben'); }
+      else if (a) {
+        cls = 'bad';
+        const hit = i === f.cpu && FB && FB.cpuHit && FB.cpuHit.q === f.last.q ? FB.cpuHit.hit : a.hit;
+        txt = a.why === 'zeit' ? '✗ Zeit um' : a.why === 'stopp' ? '✗ nicht getippt' : '✗ ' + esc(getipptText(hit, f.stufe) || 'daneben');
+      }
     } else if (f.state === 'run' && now >= f.startAt) {
       const x = f.st[i];
       if (x.ans) { cls = 'getippt'; txt = '● hat getippt'; } else txt = 'überlegt …';
     } else txt = 'bereit';
     const off = f.online && !f.online[i] && room.phase === 'final' ? '<div class="warn">Handy nicht verbunden!</div>' : '';
-    return `<div class="fcard ${cls}" style="--c:${FARBEN[i]}"><div class="fn"><i>${i + 1}</i>${esc(f.names[i])}</div><div class="fbest">${st.best}<small>BESTWERT</small></div><div class="fs">${txt} · Punkte <b>${st.cur}</b></div>${off}</div>`;
+    return `<div class="fcard ${cls}" style="--c:${FARBEN[i]}"><div class="fn"><i>${i + 1}</i>${esc(zeigeName(f.names[i], f.p[i]))}</div><div class="fbest">${st.best}<small>BESTWERT</small></div><div class="fs">${txt} · Punkte <b>${st.cur}</b></div>${off}</div>`;
   }).join('');
 }
 
@@ -467,7 +505,7 @@ function podiumZeigen() {
   const f = room && room.final; if (!f || room.phase !== 'podium') return;
   stopFinal();
   screen = 'podium:' + f.nr;
-  const order = f.p.map((pid, i) => ({ name: f.names[i], place: f.places[i], x: f.st[i] })).sort((a, b) => a.place - b.place);
+  const order = f.p.map((pid, i) => ({ name: zeigeName(f.names[i], pid), place: f.places[i], x: f.st[i] })).sort((a, b) => a.place - b.place);
   const w = order[0];
   view.innerHTML = `<div class="tpage"><div class="podium">
       <div class="tcard winner">

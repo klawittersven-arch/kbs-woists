@@ -45,7 +45,7 @@ Genauso wie bei KBS Simon says, KBS-Kart und Tetris:
 4. **Qualifying starten** (Enter). Nach einem Countdown spielen alle **gleichzeitig auf dem eigenen Handy**. Alle bekommen die Begriffe in derselben Reihenfolge. Am Beamer laufen die Restzeit und eine Live-Rangliste.
 5. Nach einem Fehler zeigt das Handy die **Auflösung**: Die richtige Stelle blinkt grün, dazu steht da, was gesucht war (z. B. „Femur = Oberschenkelknochen“) und was getippt wurde. Mit **Weiter** (oder nach 5 Sekunden) geht es mit dem nächsten Begriff weiter. Nachzügler können über den kleinen QR-Code noch einsteigen, haben dann aber nur die restliche Zeit.
 6. Ist die Zeit um, zeigt der Beamer den **Endstand**. Jedes Handy zeigt das eigene Ergebnis, den Platz und die Liste **„Das solltest du noch üben“** (alle Begriffe, bei denen es danebenging). **Weiter zum Finale** (Enter). Mit „Qualifying beenden“ lässt es sich auch vorzeitig beenden.
-7. **Finale einrichten:** Die Besten sind vorausgewählt, über die Auswahllisten lässt sich jemand austauschen. Thema, Begriffe und die **Länge** (5, 10 oder 15 Begriffe) lassen sich fürs Finale ändern. **Finale starten** (Enter), sobald alle Finalisten-Handys verbunden sind.
+7. **Finale einrichten:** Die Besten sind vorausgewählt, über die Auswahllisten lässt sich jemand austauschen. Thema, Begriffe und die **Länge** (5, 10 oder 15 Begriffe) lassen sich fürs Finale ändern. In jeder Auswahlliste gibt es außerdem **🤖 CPU (Computergegner)**, siehe unten. **Finale starten** (Enter), sobald alle Finalisten-Handys verbunden sind.
 8. **Finale (Punkte-Duell):** Der Begriff erscheint **am Beamer** (mit Ton) und auf den Handys der Finalisten. Alle tippen gleichzeitig auf dem eigenen Handy. Am Beamer sieht man nur, wer schon getippt hat. Sobald alle getippt haben (oder die Zeit um ist), kommt die **Auflösung**: Die richtige Stelle leuchtet, und farbige Punkte mit Nummern zeigen, wo jede Person getippt hat. Nach gut 6 Sekunden kommt der nächste Begriff.
 9. **Siegerehrung** mit Pokal, Platzierungen und allen Begriffen des Finales zum Nachlesen. Danach **Revanche** (Enter, gleiche Finalisten, neue Begriffe), **Andere Finalisten** oder **Neues Spiel** (Esc, zurück zur Anmeldung, alle bleiben angemeldet).
 
@@ -53,10 +53,10 @@ Genauso wie bei KBS Simon says, KBS-Kart und Tetris:
 
 | | |
 |---|---|
-| **Richtig** | 50 Punkte sicher, dazu bis zu 50 **Tempopunkte**: volle Tempopunkte in den ersten 2 Sekunden, danach werden es langsam weniger, ab 15 Sekunden gibt es keine mehr. |
+| **Richtig** | 50 Punkte sicher, dazu bis zu 50 **Tempopunkte**: volle Tempopunkte in der ersten Sekunde, danach werden es gleichmäßig weniger, ab 4 Sekunden gibt es keine mehr. Beispiele: nach 1 Sekunde 100 Punkte, nach 2 Sekunden 83, nach 3 Sekunden 67, ab 4 Sekunden 50. |
 | **Falsch oder Zeit um** | Die Punkte fallen auf **0**. |
 | **Wertung** | Es zählt der **Bestwert**: die meisten Punkte, die man am Stück geschafft hat. Ein Fehler kurz vor Schluss kostet also nicht alles. Bei Gleichstand zählen die Treffer (im Finale danach die schnellere Zeit). |
-| **Zeit pro Begriff** | 20 Sekunden (Zeitbalken). Getestet wird das Wissen, nicht das Tipptempo: Auch nach 15 Sekunden gibt es noch 50 Punkte. |
+| **Zeit pro Begriff** | 20 Sekunden (Zeitbalken). Wer die Stelle kennt, aber länger sucht, bekommt bis zum Ende der 20 Sekunden immer noch 50 Punkte. |
 | **Danebentippen** | Ein kleines Stück daneben (etwa eine Fingerkuppe) zählt noch als richtig. Wer zum Beispiel die Speiche sucht und knapp die Elle trifft, bekommt die Punkte. |
 
 ### Im Finale
@@ -64,6 +64,18 @@ Genauso wie bei KBS Simon says, KBS-Kart und Tetris:
 - Tippt ein Handy nicht (z. B. weggelegt), endet der Begriff automatisch nach 20 Sekunden. Mit **Begriff beenden** geht es sofort weiter: Wer noch nicht getippt hat, bekommt 0 Punkte.
 - **Finale abbrechen** führt zurück zur Auswahl der Finalisten.
 - Die Punkte am Beamer ändern sich erst bei der Auflösung, damit niemand vorher sieht, ob es richtig war.
+
+### Computergegner (CPU)
+
+Ist nur eine Person da, steht bei „Finalist/in 2“ automatisch **🤖 CPU**. Die CPU lässt sich auch sonst bei jedem Platz auswählen (höchstens einmal pro Finale), z. B. als dritte Person im Finale.
+
+| Stärke | richtig | Bedenkzeit |
+|---|---|---|
+| **Leicht** | etwa jedes zweite Mal | 2,5 bis 7 Sekunden |
+| **Mittel** (voreingestellt) | etwa drei von vier Mal | 1,2 bis 4,5 Sekunden |
+| **Stark** | fast immer | 0,7 bis 2,5 Sekunden |
+
+Die CPU tippt zu ihrer Bedenkzeit, am Beamer steht dann „hat getippt“. Bei der Auflösung zeigt ein Punkt mit ihrer Nummer, wo sie getippt hat. Sie bekommt Punkte nach denselben Regeln wie alle anderen. Die Stärke stellst du in der Finale-Auswahl unter **CPU** ein.
 
 ### Tasten am Beamer
 
@@ -172,7 +184,9 @@ node --test tests/room.test.mjs     # Inhalte, Regeln und Raum-Logik
 node tests/e2e.mjs                  # Browser-Durchlauf: Beamer + 5 Handys (Playwright), Bildschirmfotos in tests/ergebnisse/
 ```
 
-Der Browser-Durchlauf prüft Anmeldung, Qualifying mit richtigen und falschen Tipps und abgelaufener Zeit, Rangliste und Bestwerte (Handy und Beamer gleich), ein Finale mit 4 Personen (Skelett, Schwer) mit Auflösung, Zeitablauf und Platzierungen, ein zweites Finale mit 2 Personen und „Begriff beenden“, die Übungsseite mit „Erkunden“ und dass jeder Begriff auf einem Handy (390 × 780) gut antippbar ist. Außerdem, dass Handys und Übungsseite keinen Ton abspielen.
+Der Browser-Durchlauf prüft Anmeldung, Qualifying mit richtigen und falschen Tipps und abgelaufener Zeit, Rangliste und Bestwerte (Handy und Beamer gleich), ein Finale mit 4 Personen (Skelett, Schwer) mit Auflösung, Zeitablauf und Platzierungen, ein zweites Finale mit 2 Personen und „Begriff beenden“, ein drittes Finale gegen die CPU, die Übungsseite mit „Erkunden“ und dass jeder Begriff auf einem Handy (390 × 780) gut antippbar ist. Außerdem, dass Handys und Übungsseite keinen Ton abspielen und „Sitzung beenden“ alle Handys informiert.
+
+Gegen die Live-Seite: `node tests/e2e.mjs https://kbs-woists.klawittersven.workers.dev`
 
 **Lizenzen:** Schriften Bungee und Rubik unter SIL Open Font License (siehe `public/fonts/`). QR-Code-Generator von Kazuhiko Arase unter MIT-Lizenz (`public/js/qrcode.js`). Das Schullogo gehört der Karoline-Breitinger-Schule.
 
